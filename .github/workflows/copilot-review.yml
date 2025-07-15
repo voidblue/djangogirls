@@ -1,0 +1,53 @@
+name: Copilot PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, review_requested]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: contains(join(github.event.pull_request.requested_reviewers.*.login, ','), 'copilot')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install openai requests
+
+      - name: Get PR diff
+        id: pr_diff
+        run: |
+          curl -H "Authorization: Bearer ${{ github.token }}" \
+               -H "Accept: application/vnd.github.v3.diff" \
+               ${{ github.event.pull_request.diff_url }} > pr.diff
+
+      - name: Read copilot-instructions.md
+        id: instructions
+        run: |
+          INSTRUCTIONS=$(cat .github/copilot-instructions.md)
+          echo "instructions<<EOF" >> $GITHUB_OUTPUT
+          echo "$INSTRUCTIONS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Call LLM for review
+        id: llm_review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          python .github/scripts/copilot_review.py \
+            --instructions "${{ steps.instructions.outputs.instructions }}" \
+            --diff "$(cat pr.diff)" \
+            --pr-title "${{ github.event.pull_request.title }}" \
+            --pr-body "${{ github.event.pull_request.body }}"
+
+      - name: Post review comment
+        run: |
+          COMMENT=$(cat .github/scripts/review_comment.txt)
+          gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
