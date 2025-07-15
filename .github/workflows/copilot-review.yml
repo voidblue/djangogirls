@@ -47,7 +47,7 @@ jobs:
 
       - name: Post review comment
         run: |
-          COMMENT=$(cat .github/scripts/review_comment.txt)
+          COMMENT=$(cat .github/copilot-instructions.md)
           gh pr comment ${{ github.event.pull_request.number }} --body "$COMMENT"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
